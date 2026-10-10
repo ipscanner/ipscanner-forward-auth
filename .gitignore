@@ -1,0 +1,11 @@
+/ipscanner-forward-auth
+/dist/
+/vendor/
+*.test
+*.out
+coverage.*
+.env
+test/e2e/.env
+.idea/
+.vscode/
+.DS_Store
