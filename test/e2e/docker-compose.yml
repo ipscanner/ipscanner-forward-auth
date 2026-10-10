@@ -1,0 +1,166 @@
+# End to end setup, run by test/e2e/run.sh. Not an install example: see the
+# README for those. Ports 18100-18119 on the host.
+name: fae2e
+
+x-gate: &gate
+  image: ipscanner-forward-auth:e2e
+  restart: "no"
+  extra_hosts:
+    - host.docker.internal:host-gateway
+  volumes:
+    - secrets:/run/secrets:ro
+
+x-gate-env: &gate-env
+  IPSCANNER_API_KEY_FILE: /run/secrets/api_key
+  IPSCANNER_API_URL: ${IPSCANNER_DOCKER_API_URL:-http://host.docker.internal:3050}
+  # Raise (up to 4000, under nginx's 5 s read timeout) for a slow dev API.
+  TIMEOUT_MS: ${E2E_TIMEOUT_MS:-1500}
+
+services:
+  app:
+    image: traefik/whoami:v1.11
+    container_name: fae2e-app
+    networks: [default, proxy]
+    labels:
+      traefik.enable: "true"
+      traefik.http.routers.app.rule: PathPrefix(`/`)
+      traefik.http.routers.app.entrypoints: web,direct
+      traefik.http.routers.app.middlewares: ipscanner
+      traefik.http.services.app.loadbalancer.server.port: "80"
+      traefik.http.middlewares.ipscanner.forwardauth.address: http://ipscanner:8080/check
+      traefik.http.middlewares.ipscanner.forwardauth.trustForwardHeader: "true"
+      traefik.http.middlewares.ipscanner.forwardauth.authResponseHeadersRegex: (?i)^x-ipscanner-
+
+  # Forward auth gate for nginx, NPM, Traefik and Caddy.
+  gate:
+    <<: *gate
+    container_name: fae2e-gate
+    networks:
+      default:
+        aliases: [ipscanner]
+    ports: ["18100:8080"]
+    environment:
+      <<: *gate-env
+      SITE_ID: ${SITE_ID}
+      POLICY_TTL: "5"
+      DEBUG: "true"
+
+  # Proxy mode gate for HAProxy and Apache, on their own network where it
+  # is "ipscanner" too.
+  gate-proxy:
+    <<: *gate
+    container_name: fae2e-gate-proxy
+    networks:
+      proxy:
+        aliases: [ipscanner]
+    ports: ["18101:8080"]
+    environment:
+      <<: *gate-env
+      SITE_ID: ${SITE_ID}
+      POLICY_TTL: "5"
+      UPSTREAM_URL: http://app:80
+
+  # No site: mode and blocked classes from the environment.
+  gate-nosite:
+    <<: *gate
+    container_name: fae2e-gate-nosite
+    ports: ["18102:8080"]
+    environment:
+      <<: *gate-env
+      MODE: enforce
+      BLOCK_CLASSES: tor,hosting
+
+  # Trusts one proxy that never calls: every IP header is ignored.
+  gate-strict:
+    <<: *gate
+    container_name: fae2e-gate-strict
+    ports: ["18103:8080"]
+    environment:
+      <<: *gate-env
+      MODE: enforce
+      BLOCK_CLASSES: tor
+      TRUSTED_PROXIES: 192.0.2.10
+
+  # Dead API URL: fail open.
+  gate-dead:
+    <<: *gate
+    container_name: fae2e-gate-dead
+    ports: ["18104:8080"]
+    environment:
+      IPSCANNER_API_KEY_FILE: /run/secrets/api_key
+      IPSCANNER_API_URL: http://host.docker.internal:3999
+      MODE: enforce
+      BLOCK_CLASSES: tor
+
+  nginx:
+    image: nginx:1.29-alpine
+    container_name: fae2e-nginx
+    depends_on: [gate, app]
+    ports: ["18110:80"]
+    volumes:
+      - ./nginx/default.conf:/etc/nginx/conf.d/default.conf:ro
+
+  npm:
+    image: nginx:1.29-alpine
+    container_name: fae2e-npm
+    depends_on: [gate, app]
+    ports: ["18111:80"]
+    volumes:
+      - ./npm/proxy-host.conf:/etc/nginx/conf.d/default.conf:ro
+      - ./npm/advanced.conf:/etc/nginx/npm/advanced.conf:ro
+      - ./npm/proxy.conf:/etc/nginx/conf.d/include/proxy.conf:ro
+
+  traefik:
+    image: traefik:v3
+    container_name: fae2e-traefik
+    depends_on: [gate, app]
+    command:
+      - --providers.docker=true
+      - --providers.docker.exposedbydefault=false
+      - --providers.docker.constraints=Label(`com.docker.compose.project`,`fae2e`)
+      - --entrypoints.web.address=:80
+      # e2e only: the test client stands in for a load balancer.
+      - --entrypoints.web.forwardedHeaders.trustedIPs=10.0.0.0/8,172.16.0.0/12,192.168.0.0/16
+      # Trusts no one: incoming X-Forwarded-For is dropped.
+      - --entrypoints.direct.address=:81
+    ports: ["18112:80", "18116:81"]
+    volumes:
+      - /var/run/docker.sock:/var/run/docker.sock:ro
+
+  caddy:
+    image: caddy:2.11-alpine
+    container_name: fae2e-caddy
+    depends_on: [gate, app]
+    ports: ["18113:80"]
+    volumes:
+      - ./caddy/Caddyfile:/etc/caddy/Caddyfile:ro
+
+  haproxy:
+    image: haproxy:3.2-alpine
+    container_name: fae2e-haproxy
+    networks: [proxy]
+    depends_on: [gate-proxy, app]
+    ports: ["18114:80"]
+    volumes:
+      - ./haproxy/haproxy.cfg:/usr/local/etc/haproxy/haproxy.cfg:ro
+
+  apache:
+    image: httpd:2.4-alpine
+    container_name: fae2e-apache
+    networks: [proxy]
+    depends_on: [gate-proxy, app]
+    ports: ["18115:80"]
+    volumes:
+      - ./apache/ipscanner.conf:/usr/local/apache2/conf/extra/ipscanner.conf:ro
+    command: ["sh", "-c", "echo 'Include conf/extra/ipscanner.conf' >> conf/httpd.conf && exec httpd-foreground"]
+
+networks:
+  default:
+    name: fae2e
+  proxy:
+    name: fae2e-proxy
+
+volumes:
+  secrets:
+    name: fae2e-secrets
+    external: true

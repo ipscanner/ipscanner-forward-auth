@@ -1,0 +1,15 @@
+{
+	# e2e only: the test client stands in for a load balancer in a private
+	# network and sets X-Forwarded-For. Behind nothing, leave this out.
+	servers {
+		trusted_proxies static private_ranges
+	}
+}
+
+:80 {
+	forward_auth ipscanner:8080 {
+		uri /check
+		copy_headers X-IPScanner-Status X-IPScanner-Class X-IPScanner-Action X-IPScanner-Network-Class X-IPScanner-Anonymized X-IPScanner-Risk X-IPScanner-Country X-IPScanner-Site
+	}
+	reverse_proxy app:80
+}
