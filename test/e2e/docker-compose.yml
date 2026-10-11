@@ -1,5 +1,3 @@
-# End to end setup, run by test/e2e/run.sh. Not an install example: see the
-# README for those. Ports 18100-18119 on the host.
 name: fae2e
 
 x-gate: &gate
@@ -31,7 +29,6 @@ services:
       traefik.http.middlewares.ipscanner.forwardauth.trustForwardHeader: "true"
       traefik.http.middlewares.ipscanner.forwardauth.authResponseHeadersRegex: (?i)^x-ipscanner-
 
-  # Forward auth gate for nginx, NPM, Traefik and Caddy.
   gate:
     <<: *gate
     container_name: fae2e-gate
@@ -45,8 +42,6 @@ services:
       POLICY_TTL: "5"
       DEBUG: "true"
 
-  # Proxy mode gate for HAProxy and Apache, on their own network where it
-  # is "ipscanner" too.
   gate-proxy:
     <<: *gate
     container_name: fae2e-gate-proxy
@@ -60,7 +55,6 @@ services:
       POLICY_TTL: "5"
       UPSTREAM_URL: http://app:80
 
-  # No site: mode and blocked classes from the environment.
   gate-nosite:
     <<: *gate
     container_name: fae2e-gate-nosite

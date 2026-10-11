@@ -12,7 +12,6 @@ import (
 	edge "github.com/ipscanner/ipscanner-edge-go"
 )
 
-// Version of the forward auth gate, sent as ipscanner-forward-auth/<Version>.
 const Version = "0.1.0"
 
 const (
@@ -23,7 +22,6 @@ const (
 	defaultTrusted    = "private"
 )
 
-// options is the parsed environment.
 type options struct {
 	edge       edge.Config
 	listen     string
@@ -31,8 +29,6 @@ type options struct {
 	healthPath string
 }
 
-// loadOptions reads the configuration from environment variables. getenv
-// returns the value and whether the variable is set.
 func loadOptions(getenv func(string) (string, bool)) (options, error) {
 	get := func(name string) string {
 		v, _ := getenv(name)
@@ -72,8 +68,7 @@ func loadOptions(getenv func(string) (string, bool)) (options, error) {
 		trusted = ""
 	}
 
-	// Like the Worker: SKIP_PATHS unset means static assets, set but empty
-	// means every path is checked.
+	// SKIP_PATHS unset skips static assets; set but empty checks every path.
 	skip := edge.DefaultSkipPaths
 	if v, ok := getenv("SKIP_PATHS"); ok {
 		skip = strings.TrimSpace(v)
@@ -155,7 +150,6 @@ func millis(v string, fallback time.Duration, name string) (time.Duration, error
 	return time.Duration(n) * time.Millisecond, nil
 }
 
-// seconds accepts a number of seconds (600) or a Go duration (10m).
 func seconds(v string, fallback time.Duration, name string) (time.Duration, error) {
 	if v == "" {
 		return fallback, nil

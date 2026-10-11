@@ -1,6 +1,5 @@
 {
-	# e2e only: the test client stands in for a load balancer in a private
-	# network and sets X-Forwarded-For. Behind nothing, leave this out.
+	# e2e only: the test client acts as a private load balancer setting X-Forwarded-For.
 	servers {
 		trusted_proxies static private_ranges
 	}

@@ -1,19 +1,5 @@
 #!/usr/bin/env bash
-# End to end run: the gate image behind nginx auth_request, an NPM style
-# config, Traefik ForwardAuth, Caddy forward_auth, HAProxy and Apache (proxy
-# mode), against a running IPScanner API.
-#
-#   IPSCANNER_KEY_FILE=/path/to/key \
-#   IPSCANNER_E2E_SITE_HELPER=/path/to/site.cjs \
-#   bash test/e2e/run.sh
-#
-# IPSCANNER_API_URL (default http://localhost:3050) is the API as seen from
-# this machine, IPSCANNER_DOCKER_API_URL (default
-# http://host.docker.internal:3050) as seen from the containers. The helper
-# is a node script: `node site.cjs <site> <source_type> <mode> '<policy>'`
-# upserts a test site and prints its row, `node site.cjs rows <source> [n]`
-# prints request_log rows. KEEP=1 leaves the containers running.
-# E2E_TIMEOUT_MS (default 1500) is the gates' TIMEOUT_MS.
+# Usage: IPSCANNER_KEY_FILE=key IPSCANNER_E2E_SITE_HELPER=site.cjs bash test/e2e/run.sh (KEEP=1 keeps the containers)
 set -euo pipefail
 
 root=$(cd "$(dirname "$0")/../.." && pwd)
@@ -94,7 +80,6 @@ expect() { # expect <name> <code> [body patterns...]; a pattern starting with ! 
 	ok "$name"
 }
 
-# with_timeout <seconds> <cmd...>: the helper talks to a remote DB.
 with_timeout() {
 	local t=$1 pid watcher rc=0
 	shift
@@ -110,13 +95,12 @@ with_timeout() {
 helper() { with_timeout 60 node "$IPSCANNER_E2E_SITE_HELPER" "$@"; }
 site() { helper "$SITE_ID" forward_auth "$1" "$2"; }
 
-# site_rows: number of request_log rows of this site with source forward_auth.
 site_rows() {
 	helper rows forward_auth 500 |
 		node -e 'let s="";process.stdin.on("data",d=>s+=d).on("end",()=>{console.log(JSON.parse(s).filter(r=>r.site===process.argv[1]).length)})' "$SITE_ID"
 }
 
-wait_rows() { # wait_rows <at least> -> prints the count once reached (20 s max)
+wait_rows() {
 	local want=$1 n i
 	for i in $(seq 1 20); do
 		n=$(site_rows)
@@ -126,7 +110,7 @@ wait_rows() { # wait_rows <at least> -> prints the count once reached (20 s max)
 	echo "$n"
 }
 
-# settled_rows: the row count once request_log (flushed every 5 s) is idle.
+# request_log is flushed every 5 s: wait until the row count stops changing.
 settled_rows() {
 	local a b
 	a=$(site_rows)
@@ -255,8 +239,7 @@ expect "healthz reports the backoff" 200 '"backoff":true' '"lastError":"error"'
 
 docker stop fae2e-gate fae2e-gate-proxy >/dev/null
 sleep 6
-# Apache marks the gate as failed on the first request that cannot reach it
-# (500 when its name no longer resolves), then uses the hot standby.
+# Apache fails the gate on the first request that cannot reach it (500), then uses the hot standby.
 req 18115 "$TOR" "$CHROME" "/"
 echo "  info  apache first request with the gate down: $CODE"
 for proxy in nginx:18110 npm:18111 haproxy:18114 apache:18115; do

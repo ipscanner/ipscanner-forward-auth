@@ -25,11 +25,10 @@ const (
 	vpnIP    = "185.217.69.166"
 	botIP    = "66.249.66.1"
 	chrome   = "Mozilla/5.0 (Macintosh) Chrome/141.0.0.0 Safari/537.36"
-	proxyIP  = "10.0.0.5:41000" // a proxy in the private network: trusted by default
+	proxyIP  = "10.0.0.5:41000" // private, so trusted by default
 	publicIP = "203.0.113.9:41000"
 )
 
-// fakeAPI stands in for the IPScanner API.
 type fakeAPI struct {
 	mu     sync.Mutex
 	checks []map[string]interface{}
@@ -122,7 +121,6 @@ func baseEnv(api *fakeAPI, extra map[string]string) map[string]string {
 	return vars
 }
 
-// authRequest is a forward auth call as nginx, Traefik or Caddy make it.
 func authRequest(peer, visitor, uri string) *http.Request {
 	r := httptest.NewRequest(http.MethodGet, "/check", nil)
 	r.RemoteAddr = peer
@@ -269,7 +267,7 @@ func TestCheckBlocksConfiguredClassInEnforce(t *testing.T) {
 	if w.Header().Get("X-IPScanner-Action") != "block" || w.Header().Get("Cache-Control") != "no-store" {
 		t.Fatalf("headers %v", w.Header())
 	}
-	// A bot on a VPN counts as vpn without a site, like the WordPress plugin.
+	// Without a site, a bot on a VPN counts as vpn.
 	s2, _ := newTestServer(t, baseEnv(api, map[string]string{"MODE": "enforce", "BLOCK_CLASSES": "tor"}))
 	if w := serve(s2, authRequest(proxyIP, vpnIP, "/")); w.Code != 200 {
 		t.Fatalf("vpn not in BLOCK_CLASSES: %d", w.Code)
@@ -306,7 +304,7 @@ func TestCheckSitePolicy(t *testing.T) {
 		t.Fatalf("site not sent: %v", c[0])
 	}
 
-	// MODE=monitor keeps a site in monitor mode whatever the dashboard says.
+	// MODE=monitor overrides the dashboard mode.
 	m, _ := newTestServer(t, baseEnv(api, map[string]string{"SITE_ID": testSite, "MODE": "monitor"}))
 	if w := serve(m, authRequest(proxyIP, torIP, "/")); w.Code != 200 || w.Header().Get("X-IPScanner-Action") != "would_block" {
 		t.Fatalf("monitor override: %d %v", w.Code, w.Header())
@@ -335,8 +333,7 @@ func TestCheckCachesVerdict(t *testing.T) {
 func TestUntrustedPeerHeadersIgnored(t *testing.T) {
 	api := newFakeAPI(t)
 	s, logs := newTestServer(t, baseEnv(api, map[string]string{"MODE": "enforce", "BLOCK_CLASSES": "tor"}))
-	// A public peer is not a trusted proxy: the spoofed X-Forwarded-For
-	// and the X-Forwarded-Uri are ignored, the peer itself is checked.
+	// A public peer is untrusted: its X-Forwarded-For and X-Forwarded-Uri are ignored.
 	w := serve(s, authRequest(publicIP, torIP, "/logo.png"))
 	if w.Code != 200 {
 		t.Fatalf("code %d", w.Code)
@@ -553,7 +550,6 @@ func TestProxyMode(t *testing.T) {
 		t.Fatalf("untrusted: %d %v", w.Code, seen.headers)
 	}
 
-	// The health path is answered by the gate, everything else goes on.
 	if w := serve(s, httptest.NewRequest(http.MethodGet, "/healthz", nil)); !strings.Contains(w.Body.String(), `"mode":"proxy"`) {
 		t.Fatalf("health %s", w.Body.String())
 	}
@@ -604,8 +600,7 @@ func TestRunAndShutdown(t *testing.T) {
 	if code := healthcheck(addr, ""); code != 0 {
 		t.Fatalf("healthcheck exit %d", code)
 	}
-	// A spare connection the client dialed but never used is StateNew on the
-	// server, and Shutdown waits up to 5 s for those: close the pool first.
+	// Shutdown waits up to 5 s for dialed but unused (StateNew) conns: close the pool first.
 	http.DefaultClient.CloseIdleConnections()
 	cancel()
 	select {

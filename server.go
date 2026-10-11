@@ -13,18 +13,14 @@ import (
 	edge "github.com/ipscanner/ipscanner-edge-go"
 )
 
-// Paths of the forward auth endpoints.
 const (
 	checkPath   = "/check"
 	blockedPath = "/blocked"
 )
 
-// requestIDHeader carries the request ID of a blocked check, so a proxy
-// that shows its own 403 page (nginx error_page) can pass it to /blocked.
+// requestIDHeader lets nginx error_page pass a blocked check's request ID on to /blocked.
 const requestIDHeader = "X-IPScanner-Request-Id"
 
-// server is the HTTP handler: forward auth endpoints, or a reverse proxy
-// in front of UPSTREAM_URL.
 type server struct {
 	guard      *edge.Guard
 	healthPath string
@@ -64,12 +60,10 @@ func (s *server) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	}
 }
 
-// check is the forward auth endpoint: 200 with X-IPScanner-* headers to
-// allow, 403 with the block page to block. The original method and URI
-// come from the proxy's headers, believed only from a trusted proxy.
 func (s *server) check(w http.ResponseWriter, r *http.Request) {
 	ip := s.guard.ClientIP(r)
 	v := edge.VisitorFrom(r, ip)
+	// Forwarded method and URI are believed only from a trusted proxy.
 	if s.guard.TrustedPeer(r) {
 		if m := firstHeader(r.Header, "X-Forwarded-Method", "X-Original-Method"); m != "" {
 			v.Method = m
@@ -108,9 +102,7 @@ func (s *server) check(w http.ResponseWriter, r *http.Request) {
 	w.WriteHeader(http.StatusOK)
 }
 
-// blocked serves the 403 page for proxies that cannot pass the body of
-// the auth response on (nginx auth_request). The request ID comes from the
-// X-IPScanner-Request-Id header or the id query parameter.
+// blocked serves the 403 page for nginx auth_request, which cannot pass the check's body on.
 func (s *server) blocked(w http.ResponseWriter, r *http.Request) {
 	id := r.Header.Get(requestIDHeader)
 	if id == "" {
@@ -137,8 +129,7 @@ type healthBody struct {
 	CachedVerdicts int    `json:"cachedVerdicts"`
 }
 
-// health always answers 200: the gate fails open, so an unreachable API
-// does not make it unhealthy. The body says what the guard is doing.
+// health always answers 200: the gate fails open, so API errors must not make it unhealthy.
 func (s *server) health(w http.ResponseWriter, _ *http.Request) {
 	st := s.guard.State()
 	b := healthBody{
@@ -169,9 +160,7 @@ func (s *server) health(w http.ResponseWriter, _ *http.Request) {
 	_ = json.NewEncoder(w).Encode(b)
 }
 
-// newProxy forwards allowed requests to the upstream. The Host header is
-// kept. X-Forwarded-For gets the peer appended; X-Forwarded-* from a
-// trusted proxy are kept, from anyone else replaced.
+// newProxy keeps the Host; X-Forwarded-* pass through only from a trusted proxy, else they are replaced.
 func (s *server) newProxy(target *url.URL) *httputil.ReverseProxy {
 	return &httputil.ReverseProxy{
 		Rewrite: func(pr *httputil.ProxyRequest) {
@@ -222,7 +211,6 @@ func firstHeader(h http.Header, names ...string) string {
 	return ""
 }
 
-// uriPath returns the path of a request URI such as /a/b?c=d.
 func uriPath(uri string) string {
 	if i := strings.IndexAny(uri, "?#"); i >= 0 {
 		uri = uri[:i]

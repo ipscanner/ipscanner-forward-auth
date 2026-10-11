@@ -1,7 +1,4 @@
-// Command ipscanner-forward-auth is the IPScanner forward auth gate: a small
-// HTTP server that checks visitors for nginx auth_request, Traefik
-// ForwardAuth and Caddy forward_auth, or proxies allowed traffic to an
-// upstream (Apache, HAProxy and anything else).
+// Command ipscanner-forward-auth is the IPScanner forward auth gate and gating reverse proxy.
 package main
 
 import (
@@ -45,7 +42,6 @@ func main() {
 	}
 }
 
-// jsonLogger writes one JSON object per line with a time field first.
 type jsonLogger struct {
 	mu  sync.Mutex
 	out io.Writer
@@ -68,7 +64,6 @@ func (l *jsonLogger) line(raw string) {
 	_, _ = io.WriteString(l.out, raw+"\n")
 }
 
-// logWriter turns the http.Server error log into JSON lines.
 type logWriter struct{ l *jsonLogger }
 
 func (w logWriter) Write(p []byte) (int, error) {
@@ -84,8 +79,6 @@ func (l *jsonLogger) fields(f map[string]interface{}) {
 	l.line(string(b))
 }
 
-// run starts the server and blocks until ctx is done, then shuts down
-// gracefully. ready, when not nil, receives the listening address.
 func run(ctx context.Context, getenv func(string) (string, bool), out io.Writer, ready chan<- string) error {
 	logger := &jsonLogger{out: out}
 	o, err := loadOptions(getenv)
@@ -157,8 +150,7 @@ func run(ctx context.Context, getenv func(string) (string, bool), out io.Writer,
 	return nil
 }
 
-// healthcheck calls the health endpoint on the loopback address, for the
-// Docker HEALTHCHECK (the image has no shell or curl).
+// healthcheck backs the Docker HEALTHCHECK: the distroless image has no shell or curl.
 func healthcheck(listen, path string) int {
 	if listen == "" {
 		listen = defaultListen
