@@ -27,7 +27,7 @@ services:
 
 Do not publish its port: only your proxy should reach it (see [Client IP](#client-ip)). Then add one of the snippets below. Without a key every request passes unchecked.
 
-Binaries for Linux and macOS are on the [releases page](https://github.com/ipscanner/ipscanner-forward-auth/releases).
+The same image is on Docker Hub as `ipscanner/forward-auth`. Binaries for Linux and macOS are on the [releases page](https://github.com/ipscanner/ipscanner-forward-auth/releases).
 
 ## nginx
 
