@@ -604,6 +604,9 @@ func TestRunAndShutdown(t *testing.T) {
 	if code := healthcheck(addr, ""); code != 0 {
 		t.Fatalf("healthcheck exit %d", code)
 	}
+	// A spare connection the client dialed but never used is StateNew on the
+	// server, and Shutdown waits up to 5 s for those: close the pool first.
+	http.DefaultClient.CloseIdleConnections()
 	cancel()
 	select {
 	case err := <-done:
