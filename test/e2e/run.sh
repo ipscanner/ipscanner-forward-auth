@@ -184,6 +184,10 @@ for proxy in nginx:18110 npm:18111 traefik:18112 caddy:18113 haproxy:18114 apach
 	req "$port" "$TOR" "$CHROME" "/static/app.css"
 	expect "$name static asset skipped" 200 "X-Ipscanner-Status: skipped" '!X-Ipscanner-Class'
 done
+for proxy in nginx:18110 npm:18111; do
+	req "${proxy##*:}" "$VPN" "$CHROME" "/"
+	expect "${proxy%%:*} sets every verdict header" 200 "X-Ipscanner-Network-Class:" "X-Ipscanner-Anonymized:" "X-Ipscanner-Risk:" "X-Ipscanner-Country:" "X-Ipscanner-Site: $SITE_ID"
+done
 req 18110 "$HOME_IP" "$CHROME" "/" -X POST -d 'a=1'
 expect "nginx POST passes with body" 200 "POST / HTTP" "a=1"
 req 18110 "$TOR" "$CHROME" "/form" -X POST -d 'a=1'
