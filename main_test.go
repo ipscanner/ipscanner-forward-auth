@@ -34,6 +34,7 @@ type fakeAPI struct {
 	checks []map[string]interface{}
 	heads  []http.Header
 	policy string // policy JSON, "" for 404
+	mode   string // top level edge check mode, "" to leave it out
 	srv    *httptest.Server
 }
 
@@ -54,7 +55,7 @@ func (f *fakeAPI) serve(w http.ResponseWriter, r *http.Request) {
 	_ = json.Unmarshal(raw, &body)
 	w.Header().Set("Content-Type", "application/json")
 	f.mu.Lock()
-	policy := f.policy
+	policy, mode := f.policy, f.mode
 	if r.URL.Path == "/v1/edge/check" {
 		f.checks = append(f.checks, body)
 		f.heads = append(f.heads, r.Header.Clone())
@@ -62,16 +63,19 @@ func (f *fakeAPI) serve(w http.ResponseWriter, r *http.Request) {
 	f.mu.Unlock()
 	switch {
 	case r.URL.Path == "/v1/edge/check":
+		out := verdict("human", "residential_clean", false)
 		switch body["ip"] {
 		case torIP:
-			fmt.Fprint(w, verdict("tor", "tor", true))
+			out = verdict("tor", "tor", true)
 		case vpnIP:
-			fmt.Fprint(w, verdict("vpn", "vpn", true))
+			out = verdict("vpn", "vpn", true)
 		case botIP:
-			fmt.Fprint(w, `{"class":"verified_bot","agent":{"class":"known_bot","confidence":0.99,"action":"allow","signals":{"allowlist_verified":true}},"network":{"networkClass":"hosting","anonymized":false,"riskScore":5,"country":"US"},"site":null}`)
-		default:
-			fmt.Fprint(w, verdict("human", "residential_clean", false))
+			out = `{"class":"verified_bot","agent":{"class":"known_bot","confidence":0.99,"action":"allow","signals":{"allowlist_verified":true}},"network":{"networkClass":"hosting","anonymized":false,"riskScore":5,"country":"US"},"site":null}`
 		}
+		if mode != "" {
+			out = fmt.Sprintf(`{"mode":%q,`, mode) + out[1:]
+		}
+		fmt.Fprint(w, out)
 	case strings.HasSuffix(r.URL.Path, "/policy"):
 		if policy == "" {
 			w.WriteHeader(404)
@@ -280,6 +284,16 @@ func TestCheckMonitorNeverBlocks(t *testing.T) {
 	w := serve(s, authRequest(proxyIP, torIP, "/"))
 	if w.Code != 200 || w.Header().Get("X-IPScanner-Action") != "would_block" {
 		t.Fatalf("code %d headers %v", w.Code, w.Header())
+	}
+}
+
+func TestCheckMonitorAccountNeverBlocks(t *testing.T) {
+	api := newFakeAPI(t)
+	api.mode = "monitor"
+	s, _ := newTestServer(t, baseEnv(api, map[string]string{"MODE": "enforce", "BLOCK_CLASSES": "tor"}))
+	w := serve(s, authRequest(proxyIP, torIP, "/"))
+	if w.Code != 200 || w.Header().Get("X-IPScanner-Action") != "would_block" {
+		t.Fatalf("blocked on a monitor account: code %d headers %v", w.Code, w.Header())
 	}
 }
 
