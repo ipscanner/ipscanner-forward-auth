@@ -2,7 +2,7 @@
 FROM --platform=$BUILDPLATFORM golang:1.26-alpine AS build
 ARG TARGETOS
 ARG TARGETARCH
-ARG VERSION=0.1.0
+ARG VERSION=0.1.1
 WORKDIR /src
 COPY go.mod go.sum* ./
 COPY . .
@@ -10,7 +10,7 @@ RUN CGO_ENABLED=0 GOOS=$TARGETOS GOARCH=$TARGETARCH \
     go build -trimpath -ldflags="-s -w" -o /out/ipscanner-forward-auth .
 
 FROM gcr.io/distroless/static-debian12:nonroot
-ARG VERSION=0.1.0
+ARG VERSION=0.1.1
 LABEL org.opencontainers.image.title="ipscanner-forward-auth" \
       org.opencontainers.image.description="IPScanner forward auth gate for nginx, Traefik, Caddy, HAProxy and Apache" \
       org.opencontainers.image.source="https://github.com/ipscanner/ipscanner-forward-auth" \
