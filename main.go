@@ -2,6 +2,7 @@
 package main
 
 import (
+	"bytes"
 	"context"
 	"encoding/json"
 	"errors"
@@ -50,11 +51,13 @@ type jsonLogger struct {
 func (l *jsonLogger) line(raw string) {
 	raw = strings.TrimSpace(raw)
 	ts := `{"time":"` + time.Now().UTC().Format(time.RFC3339Nano) + `"`
-	if strings.HasPrefix(raw, "{") && strings.HasSuffix(raw, "}") {
-		if raw != "{}" {
+	var obj bytes.Buffer
+	if strings.HasPrefix(raw, "{") && json.Compact(&obj, []byte(raw)) == nil {
+		rest := obj.String()[1:]
+		if rest != "}" {
 			ts += ","
 		}
-		raw = ts + raw[1:]
+		raw = ts + rest
 	} else {
 		msg, _ := json.Marshal(raw)
 		raw = ts + `,"message":` + string(msg) + "}"
