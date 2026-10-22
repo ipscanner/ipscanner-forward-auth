@@ -12,7 +12,7 @@ import (
 	edge "github.com/ipscanner/ipscanner-edge-go"
 )
 
-const Version = "0.1.1"
+const Version = "0.1.2"
 
 const (
 	source            = "forward_auth"

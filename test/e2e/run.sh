@@ -151,7 +151,7 @@ echo "== image"
 health=$(docker inspect -f '{{.State.Health.Status}} {{.Config.User}}' fae2e-gate)
 [ "$health" = "healthy nonroot:nonroot" ] && ok "HEALTHCHECK healthy, user nonroot" || bad "health/user: $health"
 req 18100 "$HOME_IP" "$CHROME" /healthz
-expect "/healthz" 200 '"status":"ok"' '"version":"0.1.1"' "\"site\":\"$SITE_ID\""
+expect "/healthz" 200 '"status":"ok"' '"version":"0.1.2"' "\"site\":\"$SITE_ID\""
 
 echo "== enforce site policy: tor block, vpn flag"
 for proxy in nginx:18110 npm:18111 traefik:18112 caddy:18113 haproxy:18114 apache:18115; do
@@ -269,7 +269,7 @@ let s="";process.stdin.on("data",d=>s+=d).on("end",()=>{
 }
 row=$(site monitor '{"tor":"block","vpn":"block"}')
 version=$(printf '%s' "$row" | node -e 'let s="";process.stdin.on("data",d=>s+=d).on("end",()=>console.log(JSON.parse(s).client_version))')
-[ "$version" = 0.1.1 ] && ok "sites.client_version = $version" || bad "client_version: $version"
+[ "$version" = 0.1.2 ] && ok "sites.client_version = $version" || bad "client_version: $version"
 
 echo "== graceful shutdown"
 docker stop -t 15 fae2e-gate-nosite >/dev/null
